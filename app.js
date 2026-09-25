@@ -3639,9 +3639,11 @@ function runExerciseEngine(lms){
       rawAngle = valid.reduce((a,b)=>a+b,0)/valid.length;
     }
 
-    // 2. Fast-response smoothing: lighter EMA (0.25 old + 0.75 new) so fast
-    //    reps are captured without lag, but single-frame spikes are dampened.
-    c.smoothAngle = (c.smoothAngle==null) ? rawAngle : c.smoothAngle*0.25 + rawAngle*0.75;
+    // 2. Smoothing: light EMA on PC for fast response; heavier EMA on phones
+    //    where the Lite model jitters — without it, spikes break the range
+    //    guard and real reps get rejected as "not enough range".
+    const emaOld = coachMobile() ? 0.5 : 0.25;
+    c.smoothAngle = (c.smoothAngle==null) ? rawAngle : c.smoothAngle*emaOld + rawAngle*(1-emaOld);
     const angle = c.smoothAngle;
     c.lastAngle = angle;
 
