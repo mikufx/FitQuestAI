@@ -1,4 +1,6 @@
 .env
 fitquest.db
+fitquest.db-shm
+fitquest.db-wal
 __pycache__/
 *.pyc

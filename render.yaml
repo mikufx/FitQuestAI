@@ -1,0 +1,44 @@
+# FitQuestAI — Render config BACKUP (reference only).
+#
+# The live service was created manually in the dashboard and that is the
+# source of truth. This file exists so the setup is versioned and can be
+# rebuilt from scratch. Secrets are NEVER stored here — every secret value
+# lives in the dashboard (Environment tab) and is marked `sync: false`.
+#
+# DO NOT click "New Blueprint / Apply" in Render unless you intentionally
+# want a SECOND service — applying this file creates new infrastructure
+# instead of updating the existing one.
+services:
+  - type: web
+    name: fitquestai
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: FITQUEST_ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: https://fitquestai.onrender.com
+      # Secrets below are set by hand in the dashboard (Environment tab):
+      - key: DATABASE_URL # Supabase Session pooler URI (:5432). Tx pooler (:6543) FAILS with psycopg2.
+        sync: false
+      - key: SUPABASE_URL # https://ifzbhdrchypgorcgojzb.supabase.co
+        sync: false
+      - key: FITQUEST_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
+      - key: SUGGEST_TO
+        sync: false
+      - key: RESEND_ALLOW_TEST_FALLBACK # must be 0 in production
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: NVIDIA_VISION_MODEL
+        sync: false
