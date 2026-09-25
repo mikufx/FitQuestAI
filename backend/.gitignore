@@ -1,0 +1,4 @@
+.env
+fitquest.db
+__pycache__/
+*.pyc
