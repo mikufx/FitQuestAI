@@ -116,6 +116,10 @@ a{color:inherit;}
 .btn-sm{padding:7px 14px;font-size:12.5px;}
 .btn-block{width:100%;}
 .btn[disabled]{opacity:.4;pointer-events:none;}
+.btn-google{background:#fff;color:#1f1f1f;border:1px solid #dadce0;width:100%;padding:11px 20px;border-radius:99px;font-weight:600;font-size:13.5px;display:inline-flex;align-items:center;justify-content:center;gap:10px;transition:background .15s,transform .12s;}
+.btn-google:hover{background:#f6f6f6;}
+.btn-google:active{transform:scale(.97);}
+.btn-google svg{width:18px;height:18px;flex-shrink:0;}
 
 /* ---------- Cards ---------- */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);padding:20px;}
@@ -1001,6 +1005,7 @@ body[data-mode="mobile"] .premium-nav-label{display:none;}
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 
 <script>
 /* =========================================================================
@@ -1176,6 +1181,69 @@ document.addEventListener('click', function(e){
 const API_BASE = (window.FITQUEST_API_BASE || localStorage.getItem('fitquest_api_base') || (((location.protocol||'').indexOf('http')===0) ? location.origin : 'http://127.0.0.1:8000')).replace(/\/$/,'');
 function apiToken(){ return localStorage.getItem('fitquest_token')||null; }
 function apiSetToken(t){ if(t) localStorage.setItem('fitquest_token',t); else localStorage.removeItem('fitquest_token'); }
+
+/* ================= GOOGLE SIGN-IN (Supabase Auth) =================
+   Dual auth: classic email-code JWT (apiToken) + Google via Supabase.
+   Google flow: OAuth redirect -> Supabase session -> exchange the Supabase
+   access token for a FitQuest token at /api/auth/supabase. Downstream code
+   keeps using apiToken() unchanged.
+   Overrides: window.FITQUEST_SUPABASE_URL / localStorage fitquest_supabase_url (+ _anon). */
+const SUPABASE_URL = (window.FITQUEST_SUPABASE_URL || localStorage.getItem('fitquest_supabase_url') || 'https://ifzbhdrchypgorcgojzb.supabase.co').replace(/\/$/,'');
+const SUPABASE_ANON_KEY = (window.FITQUEST_SUPABASE_ANON_KEY || localStorage.getItem('fitquest_supabase_anon') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlmemJoZHJjaHlwZ29yY2dvanpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzMzM0OTEsImV4cCI6MjEwNTkwOTQ5MX0.OUQJDHVGdQhXdLMHtSIufWqM7u7Cd8afEyqNzmkCLAI');
+let _sbClient = null;
+function sbClient(){
+  if(_sbClient) return _sbClient;
+  if(!window.supabase || !window.supabase.createClient) return null;
+  try{ _sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
+  catch(e){ return null; }
+  return _sbClient;
+}
+async function doGoogleLogin(btn){
+  const sb = sbClient();
+  if(!sb){ toast('<b>Google sign-in unavailable</b><br>Check your connection and reload.'); return; }
+  if(btn) setBtnLoading(btn, true);
+  try{
+    const {error} = await sb.auth.signInWithOAuth({provider:'google', options:{redirectTo: location.origin}});
+    if(error) throw error;
+    // Redirects to Google; continuation runs in handleGoogleCallback() on return.
+  }catch(e){
+    toast('<b>Google sign-in failed</b><br>'+esc(String((e&&e.message)||e).slice(0,140)));
+    if(btn) setBtnLoading(btn,false);
+  }
+}
+async function exchangeSupabaseToken(sbToken){
+  const out = await apiReq('/api/auth/supabase',{method:'POST',body:{access_token:sbToken},timeoutMs:15000});
+  if(!(out && out.access_token)) throw new Error('Exchange failed');
+  apiSetToken(out.access_token);
+  const me = await apiFetchMe();
+  if(me && me.email){
+    state.currentUser = {name: me.name, email: me.email};
+    try{ localStorage.setItem('fitquest_session', me.email); }catch(e){}
+    await hydrateFromServer();
+    if(me.profile) enterApp(); else renderOnboarding();
+    return true;
+  }
+  return false;
+}
+async function handleGoogleCallback(){
+  const sb = sbClient();
+  if(!sb) return false;
+  try{
+    const {data:{session}} = await sb.auth.getSession();
+    if(session && session.access_token){
+      try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+      try{
+        await exchangeSupabaseToken(session.access_token);
+      }catch(e){
+        toast('<b>Google sign-in incomplete</b><br>'+esc(prettyAuthError(String((e&&e.message)||e))));
+      }
+      try{ await sb.auth.signOut(); }catch(e){} // FitQuest token owns the session from here
+      return true;
+    }
+  }catch(e){ /* not a Google return visit — fall through to normal login */ }
+  return false;
+}
+const GOOGLE_BTN_HTML = `<div class="divider">or</div><button class="btn-google" onclick="doGoogleLogin(this)"><svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Continue with Google</button>`;
 async function apiReq(path, opts){
   opts = opts||{};
   const headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
@@ -1725,6 +1793,7 @@ function renderAuthLogin(){
       <div class="field"><label>Password</label><input id="li-pass" type="password" placeholder="••••••••"></div>
       <div class="remember"><input type="checkbox" id="li-remember" checked> Remember me</div>
       <button class="btn btn-volt btn-block" onclick="doLogin(this)">Log In</button>
+      ${GOOGLE_BTN_HTML}
       <div class="auth-links">
         <button onclick="renderAuthForgot()">Forgot password?</button>
         <button onclick="renderAuthSignup()">Create account</button>
@@ -1741,6 +1810,7 @@ function renderAuthSignup(){
       <div class="field"><label>Email</label><input id="su-email" type="email" placeholder="you@example.com"></div>
       <div class="field"><label>Password</label><input id="su-pass" type="password" placeholder="At least 6 characters"></div>
       <button class="btn btn-volt btn-block" onclick="doSignup(this)">Sign Up</button>
+      ${GOOGLE_BTN_HTML}
     </div>`;
 }
 function renderAuthForgot(){
@@ -5800,6 +5870,7 @@ async function doDeleteAccount(){
 
 /* ================= INIT ================= */
 renderAuthLogin();
+handleGoogleCallback(); // Google OAuth return visit? exchange session -> enter app
 
 /* Restore a previous session after a reload (camera round-trip, OS tab kill).
    Backend users re-validate the token; local users restore from registry. */

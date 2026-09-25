@@ -20,6 +20,11 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
 
 
+class SupabaseLoginIn(BaseModel):
+    """Short-lived Supabase access token (from Google OAuth) to exchange for a FitQuest token."""
+    access_token: str = Field(min_length=10, max_length=8000)
+
+
 class SignupOut(BaseModel):
     message: str
     email: str

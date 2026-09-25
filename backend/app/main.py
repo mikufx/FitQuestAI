@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 # FitQuestAI/ folder (parent of backend/) — holds the HTML + logo assets.
 SITE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from .database import Base, SessionLocal, engine, migrate_user_table
+from .database import Base, SessionLocal, engine
 from .models import SEED_CHALLENGES, Challenge
 from .security import (
     RateLimitMiddleware,
@@ -60,7 +60,7 @@ app.include_router(nutrition.router)
 app.include_router(challenges.router)
 app.include_router(leaderboard.router)
 
-# Serve the site itself so ONE ngrok tunnel covers frontend + API (same origin).
+# Serve the site itself so one Render service covers frontend + API (same origin).
 app.mount("/static", StaticFiles(directory=SITE_DIR), name="site-static")
 
 
@@ -73,9 +73,13 @@ def site_index():
 def startup():
     startup_checks()  # refuses boot in prod without JWT secret; locks test fallback
     Base.metadata.create_all(bind=engine)
-    migrate_user_table()
+    # create_all() doesn't add columns to pre-existing tables (Supabase already live).
     db = SessionLocal()
     try:
+        from sqlalchemy import text
+
+        db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS supabase_id VARCHAR(64)"))
+        db.commit()
         for c in SEED_CHALLENGES:
             if not db.get(Challenge, c["id"]):
                 db.add(Challenge(**c))

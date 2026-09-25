@@ -11,7 +11,8 @@ from ..auth import create_token, hash_password, verify_password
 from ..database import get_db
 from ..emailer import send_verification_email
 from ..models import SEED_CHALLENGES, Challenge, Profile, User, UserChallenge
-from ..schemas import ForgotIn, LoginIn, ResendIn, ResetIn, SignupIn, SignupOut, TokenOut, UserOut, VerifyIn
+from ..schemas import ForgotIn, LoginIn, ResendIn, ResetIn, SignupIn, SignupOut, SupabaseLoginIn, TokenOut, UserOut, VerifyIn
+from ..supabase_auth import verify_supabase_token
 from .deps import current_user, level_for_xp
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -160,6 +161,37 @@ async def resend(body: ResendIn, db: Session = Depends(get_db)):
         raise HTTPException(502, str(e))
     msg = _result_message(dev) if dev else "New code sent. Check your email."
     return SignupOut(message=msg, email=email, dev_code=dev)
+
+
+@router.post("/supabase", response_model=TokenOut)
+def supabase_login(body: SupabaseLoginIn, db: Session = Depends(get_db)):
+    """Exchange a verified Supabase (Google) access token for a FitQuest token.
+
+    Same email as an existing email-code account = same merged account.
+    Google-verified emails skip the Resend code step (Google already proved ownership).
+    """
+    try:
+        ident = verify_supabase_token(body.access_token)
+    except RuntimeError as e:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(e))
+    user = db.query(User).filter_by(supabase_id=ident["sub"]).first()
+    if not user:
+        user = db.query(User).filter_by(email=ident["email"]).first()
+        if user:
+            user.supabase_id = ident["sub"]  # merge: link Google to existing account
+            user.is_verified = True
+        else:
+            user = User(
+                name=ident["name"], email=ident["email"],
+                pw_hash=hash_password(secrets.token_hex(32)),  # random: password login stays disabled
+                streak_days=["", "", "", "", "", "", ""],
+                is_verified=True, supabase_id=ident["sub"],
+            )
+            db.add(user)
+            db.flush()
+            _ensure_challenges(db, user)
+    db.commit()
+    return TokenOut(access_token=create_token(user.id))
 
 
 @router.post("/login", response_model=TokenOut)

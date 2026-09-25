@@ -19,6 +19,8 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     pw_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    # Supabase Auth link. NULL = classic email-code account; set = Google/Supabase login merged in.
+    supabase_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     xp: Mapped[int] = mapped_column(Integer, default=0)
     workouts_completed: Mapped[int] = mapped_column(Integer, default=0)
     total_reps: Mapped[int] = mapped_column(Integer, default=0)

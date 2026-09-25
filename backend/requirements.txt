@@ -5,6 +5,7 @@ psycopg2-binary>=2.9.9
 pydantic==2.10.4
 pydantic-settings==2.7.0
 PyJWT==2.10.1
+cryptography>=42.0.0  # ES256 verification of Supabase Auth (Google) tokens via JWKS
 email-validator==2.3.0
 python-dotenv==1.2.3
 python-multipart==0.0.20
