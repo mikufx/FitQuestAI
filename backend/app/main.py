@@ -69,6 +69,24 @@ def site_index():
     return FileResponse(os.path.join(SITE_DIR, "index.html"))
 
 
+# Frontend split: index.html references /styles.css, /app.js, /clips.js.
+# Explicit allowlist (not a full directory mount) so nothing else leaks.
+_SITE_ASSETS = {
+    "styles.css": "text/css",
+    "app.js": "application/javascript",
+    "clips.js": "application/javascript",
+}
+
+
+@app.get("/{name}", include_in_schema=False)
+def site_asset(name: str):
+    if name in _SITE_ASSETS:
+        return FileResponse(os.path.join(SITE_DIR, name), media_type=_SITE_ASSETS[name])
+    from fastapi import HTTPException
+
+    raise HTTPException(404, "Not found")
+
+
 @app.on_event("startup")
 def startup():
     startup_checks()  # refuses boot in prod without JWT secret; locks test fallback
