@@ -81,7 +81,11 @@ _SITE_ASSETS = {
 @app.get("/{name}", include_in_schema=False)
 def site_asset(name: str):
     if name in _SITE_ASSETS:
-        return FileResponse(os.path.join(SITE_DIR, name), media_type=_SITE_ASSETS[name])
+        # app.js/styles.css change often during development: force revalidation
+        # every load (304 if unchanged — cheap) so phones never run stale code.
+        # clips.js (videos, rarely changes) keeps default ETag caching.
+        headers = {"Cache-Control": "no-cache"} if name != "clips.js" else None
+        return FileResponse(os.path.join(SITE_DIR, name), media_type=_SITE_ASSETS[name], headers=headers)
     from fastapi import HTTPException
 
     raise HTTPException(404, "Not found")
