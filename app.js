@@ -3700,7 +3700,11 @@ function runExerciseEngine(lms){
 
     // Threshold angles — contracted = flexed / deep (low), extended = straight (high).
     // Use min/max so invert exercises (downAngle > upAngle) work correctly.
-    const CONTRACTED = isPress ? 40  : Math.min(ex.downAngle, ex.upAngle);  // shoulder press: arms by sides ~20-50°
+    // Shoulder press on phones: front camera reads "arms at sides" as ~50-80°
+    // (perspective + bent elbows), never reaching the PC-tuned 40°. Mobile
+    // uses 55° so real full lowerings count; partial reps still fail.
+    const mob = coachMobile();
+    const CONTRACTED = isPress ? (mob ? 55 : 40)  : Math.min(ex.downAngle, ex.upAngle);  // shoulder press: arms by sides ~20-50°
     const EXTENDED   = isPress ? 155 : Math.max(ex.downAngle, ex.upAngle);    // shoulder press: fully overhead ~155-170°
     // Hysteresis deadband: must travel at least this many degrees past the
     // transition threshold before the phase flips. Prevents micro-movement counts.
@@ -3749,9 +3753,8 @@ function runExerciseEngine(lms){
 
     // 6. Main phase state machine with range-of-motion guard.
     //    A rep only counts if the joint travelled MIN_RANGE degrees during the rep.
-    //    Phones observe shrunken range (smoothing + sparse frames), so they get
-    //    a forgiving guard; PC keeps the strict one. Shallow half-reps still fail.
-    const mob = coachMobile();
+    // Phones observe shrunken range (smoothing + sparse frames), so they get
+    // a forgiving guard; PC keeps the strict one. Shallow half-reps still fail.
     const MIN_RANGE = isPress ? (mob ? 32 : 45) : (mob ? 14 : 20); // shoulder press needs bigger range
 
     if(!isInvert && !isPress){
