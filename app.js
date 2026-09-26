@@ -3174,12 +3174,31 @@ function initPoseEngine(){
       if(!video){ reject(new Error('no-video')); return; }
       mpCamera = new Camera(video,{onFrame: async()=>{
         if(!c.running) return;
-        try{ await mpPose.send({image:video}); }
-        catch(err){
-          // A single bad frame (e.g. 1s net jitter on WASM fetch) must not kill the loop.
-          c.consecFail=(c.consecFail||0)+1;
-          if(c.consecFail>=30){ c.consecFail=0; softReinitCoach(); }
+        // Slow phones: never pile up inferences — drop the frame if the
+        // previous one is still being processed.
+        if(c.sendBusy) return;
+        c.sendBusy=true;
+        try{
+          await Promise.race([
+            mpPose.send({image:video}),
+            // Hung inference (weak phone runs out of steam): a send that
+            // never settles would freeze the loop forever with no error.
+            // Time out, kill the poisoned engine, rebuild it via reinit
+            // (reps/sets/seconds preserved; Retry screen after 3 fails).
+            new Promise((_,rej)=>setTimeout(()=>rej(new Error('pose-send-timeout')),8000))
+          ]);
         }
+        catch(err){
+          c.consecFail=(c.consecFail||0)+1;
+          if(err && err.message==='pose-send-timeout'){
+            try{ if(mpPose && mpPose.close) mpPose.close(); }catch(e){}
+            mpPose=null;
+            softReinitCoach();
+          }
+          // A single bad frame (e.g. 1s net jitter on WASM fetch) must not kill the loop.
+          else if(c.consecFail>=30){ c.consecFail=0; softReinitCoach(); }
+        }
+        finally{ c.sendBusy=false; }
       },width:coachMobile()?1280:1920,height:coachMobile()?720:1080});
       mpCamera.start();
       const t0=Date.now();
@@ -3256,7 +3275,7 @@ async function startCamera(){
   c.angleHistory=[];c.smoothAngle=null;c.peakAngle=null;c.valleyAngle=null;c.repLocked=false;c.framesSincePhase=0;c.neutralFrames=0;
   c.sessionStartCalories = state.totalCalories||0; c.sessionCalories = 0; c.sessionStartReps = state.totalReps||0;
   c.lastFormPush = 0;
-  c.consecFail=0; c.reinitTries=0; c.lastResultAt=0; c.stallNotified=false;
+  c.consecFail=0; c.reinitTries=0; c.lastResultAt=0; c.stallNotified=false; c.sendBusy=false;
   firstPoseSeen=false; reinitInFlight=false;
   el('cam-placeholder').classList.add('hidden');
   el('cam-loading').classList.remove('hidden');
