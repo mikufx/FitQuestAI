@@ -3714,7 +3714,7 @@ function runExerciseEngine(lms){
           const range = c.peakAngle - c.valleyAngle;
           if(range >= MIN_RANGE){
             c.phase='down';
-            c.peakAngle=angle; c.valleyAngle=angle;
+            c.peakAngle=angle; c.valleyAngle=angle; c.smoothAngle=null;
             setFeedback('Good depth — drive back up!','med');
           } else {
             setFeedback('Go lower — more range of motion.','med');
@@ -3759,7 +3759,7 @@ function runExerciseEngine(lms){
           const range = c.peakAngle - c.valleyAngle;
           if(range >= MIN_RANGE){
             c.phase='down';
-            c.peakAngle=angle; c.valleyAngle=angle;
+            c.peakAngle=angle; c.valleyAngle=angle; c.smoothAngle=null;
             setFeedback('Good — press overhead again!','med');
           } else {
             setFeedback('Lower arms fully before pressing again.','med');
@@ -3791,7 +3791,7 @@ function runExerciseEngine(lms){
           const range = c.peakAngle - c.valleyAngle;
           if(range >= MIN_RANGE){
             c.phase='up';
-            c.peakAngle=angle; c.valleyAngle=angle;
+            c.peakAngle=angle; c.valleyAngle=angle; c.smoothAngle=null;
             setFeedback('Nice contraction — release slowly.','med');
           } else {
             setFeedback('Curl / lift higher for full rep.','med');
@@ -3996,6 +3996,10 @@ function completeRep(ex, fraction){
   // Keep fractional reps (0.5 per side for alternate engines) as float.
   // Round only for display / completion checks so left+right = 1 rep.
   c.reps += (fraction||1);
+  // Fresh angle tracking for the next rep: the EMA converges during a rep
+  // and on slow phones lags behind real motion, freezing the counter after
+  // rep 1. Re-init from raw (same as session start, which always works).
+  c.smoothAngle = null;
   const displayReps = Math.floor(c.reps + 1e-6);
   const rc=el('rep-count');
   if(rc){ rc.textContent=displayReps; rc.classList.remove('pulse'); void rc.offsetWidth; rc.classList.add('pulse'); }
