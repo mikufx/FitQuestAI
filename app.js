@@ -3660,7 +3660,9 @@ function runExerciseEngine(lms){
     const EXTENDED   = isPress ? 155 : Math.max(ex.downAngle, ex.upAngle);    // shoulder press: fully overhead ~155-170°
     // Hysteresis deadband: must travel at least this many degrees past the
     // transition threshold before the phase flips. Prevents micro-movement counts.
-    const HYST = 10; // degrees of required overshoot past threshold
+    // Phones get a smaller deadband: Lite-model jitter + low FPS shrink the
+    // observed motion, and the strict PC value rejects real reps after rep ~2.
+    const HYST = coachMobile() ? 6 : 10; // degrees of required overshoot past threshold
 
     // 4. Update running peak/valley to track total range of motion this half-rep.
     // Always initialise from current angle so comparisons never operate on null.
@@ -3703,8 +3705,10 @@ function runExerciseEngine(lms){
 
     // 6. Main phase state machine with range-of-motion guard.
     //    A rep only counts if the joint travelled MIN_RANGE degrees during the rep.
-    //    Keep the threshold low enough to count real reps without requiring perfect depth.
-    const MIN_RANGE = isPress ? 45 : 20; // shoulder press needs bigger range
+    //    Phones observe shrunken range (smoothing + sparse frames), so they get
+    //    a forgiving guard; PC keeps the strict one. Shallow half-reps still fail.
+    const mob = coachMobile();
+    const MIN_RANGE = isPress ? (mob ? 32 : 45) : (mob ? 14 : 20); // shoulder press needs bigger range
 
     if(!isInvert && !isPress){
       // Normal exercises: phase 'up' = extended, phase 'down' = contracted.
