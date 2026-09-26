@@ -3428,6 +3428,15 @@ function drawSkeleton(ctx,lms,w,h){
   ctx.restore();
 }
 
+/* HUD throttle: the pose loop fires per frame, but DOM writes (stat tiles,
+   score ring) every frame crush weak phone CPUs and starve the WASM pose
+   inference — frames slow to a trickle and rep counting freezes. Cap these
+   side-effects at ~4Hz/2.5Hz; counting logic itself stays per-frame. */
+function hudDue(key, ms){
+  const c=state.coach, now=Date.now(), k='_hud_'+key;
+  if(c[k] && now-c[k]<ms) return false;
+  c[k]=now; return true;
+}
 function onPoseResults(results){
   const c0=state.coach;
   c0.lastResultAt=Date.now(); c0.consecFail=0;
@@ -3472,8 +3481,8 @@ function onPoseResults(results){
   // Live Stats pose confidence tile
   const confPct = overallVis>0.75 ? Math.round(overallVis*100) : overallVis>0.45 ? Math.round(overallVis*100) : Math.round(overallVis*100);
   const lconf=el('ls-conf'); if(lconf) lconf.textContent=confPct+'%';
-  // Also sync phase on every pose frame
-  syncLiveStats();
+  // Also sync phase on pose frames (throttled — see hudDue)
+  if(hudDue('hud',250)) syncLiveStats();
 
   if(overallVis<0.28){
     setFeedback('Please move your full body into the camera frame.', 'lo');
@@ -4028,6 +4037,9 @@ function addXp10Silent(){
   refreshChrome();
 }
 function updateFormScore(ex, primaryVal, lms){
+  // Throttled (see hudDue): score math + DOM writes every frame would
+  // saturate phone CPUs. 2.5Hz is plenty for a displayed score.
+  if(!hudDue('form',400)) return;
   // Deterministic heuristic composite score (no randomness, stable across runs)
   const torsoTilt = (()=>{
     const sh=lms[LM.LSH], hip=lms[LM.LHIP];
