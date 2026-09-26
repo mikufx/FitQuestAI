@@ -3044,6 +3044,7 @@ function renderCoach(){
           </div>
         </div>
         <div class="privacy-note">🔒 Camera frames are processed locally for pose landmarks and are not uploaded or permanently stored. This estimates form — it isn't a medical diagnosis.</div>
+        <div class="small-muted" id="coach-debug" style="font-size:11px;opacity:.75;margin-top:6px;">⚙️ starting…</div>
       </div>
       <div class="coach-side">
 
@@ -3437,9 +3438,24 @@ function hudDue(key, ms){
   if(c[k] && now-c[k]<ms) return false;
   c[k]=now; return true;
 }
+function updateCoachDebug(){
+  const d=el('coach-debug'); if(!d) return;
+  const c=state.coach;
+  const a = c.lastAngle==null ? '—' : Math.round(c.lastAngle)+'°';
+  const p = c.peakAngle==null ? '—' : Math.round(c.peakAngle);
+  const v = c.valleyAngle==null ? '—' : Math.round(c.valleyAngle);
+  d.textContent = `⚙️ ${c.fps||0}fps · f${c.frames||0} · ${c.phase||'—'} · ∠${a} · P${p}/V${v}`;
+}
 function onPoseResults(results){
   const c0=state.coach;
   c0.lastResultAt=Date.now(); c0.consecFail=0;
+  // Frame/FPS accounting for the on-screen debug line (diagnoses stuck counters)
+  const _fn=Date.now();
+  c0.frames=(c0.frames||0)+1;
+  if(!c0._fpsT || _fn-c0._fpsT>=1000){
+    c0.fps=Math.round((c0.frames-(c0._fpsF||0))*1000/Math.max(1,_fn-(c0._fpsT||_fn)));
+    c0._fpsT=_fn; c0._fpsF=c0.frames;
+  }
   if(c0.stallNotified){ c0.stallNotified=false; setFeedback('Signal restored — keep going!','hi'); }
   const canvas=el('cam-canvas'), video=el('cam-video');
   if(!canvas||!video) return;
@@ -3482,7 +3498,7 @@ function onPoseResults(results){
   const confPct = overallVis>0.75 ? Math.round(overallVis*100) : overallVis>0.45 ? Math.round(overallVis*100) : Math.round(overallVis*100);
   const lconf=el('ls-conf'); if(lconf) lconf.textContent=confPct+'%';
   // Also sync phase on pose frames (throttled — see hudDue)
-  if(hudDue('hud',250)) syncLiveStats();
+  if(hudDue('hud',250)){ syncLiveStats(); updateCoachDebug(); }
 
   if(overallVis<0.28){
     setFeedback('Please move your full body into the camera frame.', 'lo');
