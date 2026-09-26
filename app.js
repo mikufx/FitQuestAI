@@ -3452,6 +3452,9 @@ function drawSkeleton(ctx,lms,w,h){
    score ring) every frame crush weak phone CPUs and starve the WASM pose
    inference — frames slow to a trickle and rep counting freezes. Cap these
    side-effects at ~4Hz/2.5Hz; counting logic itself stays per-frame. */
+// Build tag: bump on every coach fix. Shown in the on-screen debug line so a
+// bug report identifies EXACTLY which code ran (kills stale-cache confusion).
+const FQ_BUILD='p2-pressrel';
 function hudDue(key, ms){
   const c=state.coach, now=Date.now(), k='_hud_'+key;
   if(c[k] && now-c[k]<ms) return false;
@@ -3463,7 +3466,7 @@ function updateCoachDebug(){
   const a = c.lastAngle==null ? '—' : Math.round(c.lastAngle)+'°';
   const p = c.peakAngle==null ? '—' : Math.round(c.peakAngle);
   const v = c.valleyAngle==null ? '—' : Math.round(c.valleyAngle);
-  d.textContent = `⚙️ ${c.fps||0}fps · f${c.frames||0} · ${c.phase||'—'} · ∠${a} · P${p}/V${v}`;
+  d.textContent = `⚙️ b${FQ_BUILD} · ${c.fps||0}fps · f${c.frames||0} · ${c.phase||'—'} · ∠${a} · P${p}/V${v}`;
 }
 function onPoseResults(results){
   const c0=state.coach;
@@ -3790,9 +3793,15 @@ function runExerciseEngine(lms){
       }
     } else if(isPress){
       // Shoulder press: phase 'down' = arms at sides (low angle), phase 'up' = overhead (high angle).
+      // Flip rule is absolute OR relative: a 30°+ rise from this rep's valley
+      // (or 30°+ drop from its peak) counts as the transition. Front phone
+      // cameras geometrically under-read both extremes, so absolute-only lines
+      // calibrated on PC side-views strand phone users mid-set forever.
+      // The MIN_RANGE guard still applies, so jitter/small wiggles can't count.
+      const PRESS_REL = 30;
       if(c.phase==='down'){
         c.peakAngle = Math.max(c.peakAngle, angle);
-        if(angle >= EXTENDED - HYST){
+        if(angle >= EXTENDED - HYST || (c.valleyAngle!=null && angle >= c.valleyAngle + PRESS_REL)){
           const range = c.peakAngle - c.valleyAngle;
           if(range >= MIN_RANGE){
             c.phase='up';
@@ -3806,7 +3815,7 @@ function runExerciseEngine(lms){
         }
       } else { // phase === 'up'
         c.valleyAngle = Math.min(c.valleyAngle, angle);
-        if(angle <= CONTRACTED + HYST){
+        if(angle <= CONTRACTED + HYST || (c.peakAngle!=null && angle <= c.peakAngle - PRESS_REL)){
           const range = c.peakAngle - c.valleyAngle;
           if(range >= MIN_RANGE){
             c.phase='down';
