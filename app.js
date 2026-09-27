@@ -4261,16 +4261,39 @@ async function handleFoodPhoto(evt){
   evt.target.value = ''; // allow re-uploading the same photo
   analyzeFoodFile(file);
 }
+/* HEIC/HEIF (iPhone default) can't be decoded by browsers — detect by MIME
+   or extension (some phones send an empty MIME type) so we can convert. */
+function isHeicFile(file){
+  if(!file) return false;
+  if(/heic|heif/i.test(file.type||'')) return true;
+  return /\.hei[cf]$/i.test(file.name||'');
+}
 /* Downscale to max 1280px JPEG so uploads stay small and fast. Returns the
    original file untouched if it is already small or cannot be decoded. */
 function downscaleFoodImage(file){
+  // iPhone HEIC first: convert on-device to JPEG, then run the normal
+  // pipeline on the result. JPEG/PNG/WebP/GIF/BMP/AVIF already decode
+  // natively in browsers, so HEIC was the only unsupported format.
+  if(isHeicFile(file)){
+    return new Promise(resolve=>{
+      if(typeof heic2any==='undefined'){
+        toast('<b>Photo converter still loading</b><br>Check connection and retry in a few seconds.');
+        resolve(null); return;
+      }
+      toast('<b>Converting iPhone photo…</b><br>One moment.');
+      heic2any({blob:file, toType:'image/jpeg', quality:0.85}).then(out=>{
+        const b = Array.isArray(out) ? out[0] : out;
+        try{ downscaleFoodImage(new File([b],'meal.jpg',{type:'image/jpeg'})).then(resolve); }
+        catch(e){ resolve(null); }
+      }).catch(()=>{
+        toast('<b>Could not read this photo</b><br>Try sending it as JPEG (Photos → Share → Save as JPEG) and retry.');
+        resolve(null);
+      });
+    });
+  }
   return new Promise(resolve=>{
     try{
       if(!file || !file.type || file.type.indexOf('image/')!==0){ resolve(file); return; }
-      if(/heic|heif/i.test(file.type)){
-        toast('<b>Photo format not supported</b><br>iPhone HEIC photos cannot be read here — send it as JPEG (Photos → Share → Save, or screenshot it) and retry.');
-        resolve(null); return;
-      }
       if(file.size < 900*1024){ resolve(file); return; }
       const url = URL.createObjectURL(file);
       const img = new Image();
