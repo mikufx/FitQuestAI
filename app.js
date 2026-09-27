@@ -1116,6 +1116,17 @@ function enterApp(){
   // Remember who is inside, so a reload (e.g. OS killing the tab during
   // camera) restores the session instead of dumping at the login screen.
   try{ if(state.currentUser) localStorage.setItem('fitquest_session',state.currentUser.email); }catch(e){}
+  // Returning from the native food camera after an OS-kill reload? Session +
+  // view restore below; add a guiding toast (fresh flag only, 10-min window).
+  try{
+    const ret = sessionStorage.getItem('fitquest_food_return');
+    if(ret){
+      sessionStorage.removeItem('fitquest_food_return');
+      if(Date.now()-(parseInt(ret,10)||0) < 10*60*1000){
+        setTimeout(()=>toast('<b>📷 Welcome back</b><br>Tap Take Photo to snap your meal again — everything else is intact.'), 900);
+      }
+    }
+  }catch(e){}
   viewHistory=[];
   // Sidebar nav (PC)
   el('nav-list').innerHTML = NAV_ITEMS.map(n=>`<button class="nav-item" data-v="${n.id}" onclick="setView('${n.id}')"><span class="ic">${n.ic}</span>${n.label}</button>`).join('');
@@ -4243,6 +4254,8 @@ function matchFoodIcon(name){
   return hit ? hit.ic : '🍽️';
 }
 async function handleFoodPhoto(evt){
+  // Photo arrived in the live page (no OS kill) — clear the return flag.
+  try{ sessionStorage.removeItem('fitquest_food_return'); }catch(e){}
   const file = evt.target.files[0];
   if(!file) return;
   evt.target.value = ''; // allow re-uploading the same photo
@@ -4288,7 +4301,14 @@ function downscaleFoodImage(file){
    capture attribute and would otherwise dump into file explorer). */
 function foodTakePhoto(){
   const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
-  if(coarse){ document.getElementById('food-camera').click(); return; }
+  if(coarse){
+    // Native camera backgrounds the tab; Android may kill it under memory
+    // pressure and restore with a full reload (the photo then dies with the
+    // old page). Persist everything + stamp a return flag so boot restores
+    // the session/view and guides a one-tap retry. PC path untouched.
+    try{ saveStateToStorage(); sessionStorage.setItem('fitquest_food_return', String(Date.now())); }catch(e){}
+    document.getElementById('food-camera').click(); return;
+  }
   openFoodCamera();
 }
 function stopFoodCam(){
