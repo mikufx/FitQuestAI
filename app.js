@@ -1204,6 +1204,9 @@ function setView(v,isPop){
   document.querySelectorAll('.nav-item,[data-v]').forEach(x=>x.classList.toggle('active',x.dataset.v===v));
   const renderers={dashboard:renderDashboard,coach:renderCoach,library:renderLibrary,nutrition:renderNutrition,challenges:renderChallenges,leaderboard:renderLeaderboard,progress:renderProgress,profile:renderProfile,xpstore:renderXpStore,delete:renderDeleteView,forgot:renderForgotView,premium:renderPremium,paywall:renderPaywall,assistant:renderAssistant,trainer:renderTrainer,checkout:renderFakeCheckout,yoga:renderYoga};
   if(v!=='coach') stopCamera();
+  // Leaving Nutrition with a live food preview abandons the camera stream —
+  // release it or it holds memory (and the camera light) indefinitely.
+  if(v!=='nutrition'){ try{ stopFoodCam(); }catch(e){} }
   // Leaving AI Coach abandons the stale exercise page (camera is already off),
   // so reopening Coach always lands on the exercise picker — never a dead session.
   if(v!=='coach' && state.coach && state.coach.selectedExercise){
@@ -4268,26 +4271,39 @@ function isHeicFile(file){
   if(/heic|heif/i.test(file.type||'')) return true;
   return /\.hei[cf]$/i.test(file.name||'');
 }
-/* Downscale to max 1280px JPEG so uploads stay small and fast. Returns the
-   original file untouched if it is already small or cannot be decoded. */
+/* heic2any loads on demand (first HEIC only) so its WASM never costs memory
+   for JPEG/PNG users. */
+function loadHeic2Any(){
+  return new Promise(resolve=>{
+    if(typeof heic2any!=='undefined'){ resolve(true); return; }
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+    s.crossOrigin='anonymous';
+    s.onload=()=>resolve(typeof heic2any!=='undefined');
+    s.onerror=()=>resolve(false);
+    document.head.appendChild(s);
+  });
+}
 function downscaleFoodImage(file){
   // iPhone HEIC first: convert on-device to JPEG, then run the normal
   // pipeline on the result. JPEG/PNG/WebP/GIF/BMP/AVIF already decode
   // natively in browsers, so HEIC was the only unsupported format.
   if(isHeicFile(file)){
     return new Promise(resolve=>{
-      if(typeof heic2any==='undefined'){
-        toast('<b>Photo converter still loading</b><br>Check connection and retry in a few seconds.');
-        resolve(null); return;
-      }
       toast('<b>Converting iPhone photo…</b><br>One moment.');
-      heic2any({blob:file, toType:'image/jpeg', quality:0.85}).then(out=>{
-        const b = Array.isArray(out) ? out[0] : out;
-        try{ downscaleFoodImage(new File([b],'meal.jpg',{type:'image/jpeg'})).then(resolve); }
-        catch(e){ resolve(null); }
-      }).catch(()=>{
-        toast('<b>Could not read this photo</b><br>Try sending it as JPEG (Photos → Share → Save as JPEG) and retry.');
-        resolve(null);
+      loadHeic2Any().then(ok=>{
+        if(!ok || typeof heic2any==='undefined'){
+          toast('<b>Photo converter still loading</b><br>Check connection and retry in a few seconds.');
+          resolve(null); return;
+        }
+        heic2any({blob:file, toType:'image/jpeg', quality:0.85}).then(out=>{
+          const b = Array.isArray(out) ? out[0] : out;
+          try{ downscaleFoodImage(new File([b],'meal.jpg',{type:'image/jpeg'})).then(resolve); }
+          catch(e){ resolve(null); }
+        }).catch(()=>{
+          toast('<b>Could not read this photo</b><br>Try sending it as JPEG (Photos → Share → Save as JPEG) and retry.');
+          resolve(null);
+        });
       });
     });
   }
