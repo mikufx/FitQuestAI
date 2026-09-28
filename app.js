@@ -4284,6 +4284,28 @@ function loadHeic2Any(){
     document.head.appendChild(s);
   });
 }
+/* Legacy full-decode fallback (only when createImageBitmap is missing).
+   Decodes the whole image before shrinking — fine on PC, risky on weak phones. */
+function decodeFoodFull(file, resolve){
+  try{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const MAX = 1280;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        if(scale >= 1){ URL.revokeObjectURL(url); resolve(file); return; }
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(img.width*scale); cv.height = Math.round(img.height*scale);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        cv.toBlob(b=>resolve(b || file), 'image/jpeg', 0.82);
+      }catch(e){ URL.revokeObjectURL(url); resolve(file); }
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  }catch(e){ resolve(file); }
+}
 function downscaleFoodImage(file){
   // iPhone HEIC first: convert on-device to JPEG, then run the normal
   // pipeline on the result. JPEG/PNG/WebP/GIF/BMP/AVIF already decode
@@ -4311,22 +4333,36 @@ function downscaleFoodImage(file){
     try{
       if(!file || !file.type || file.type.indexOf('image/')!==0){ resolve(file); return; }
       if(file.size < 900*1024){ resolve(file); return; }
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = ()=>{
-        try{
-          const MAX = 1280;
-          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
-          if(scale >= 1){ URL.revokeObjectURL(url); resolve(file); return; }
-          const cv = document.createElement('canvas');
-          cv.width = Math.round(img.width*scale); cv.height = Math.round(img.height*scale);
-          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-          URL.revokeObjectURL(url);
-          cv.toBlob(b=>resolve(b || file), 'image/jpeg', 0.82);
-        }catch(e){ URL.revokeObjectURL(url); resolve(file); }
-      };
-      img.onerror = ()=>{ URL.revokeObjectURL(url); resolve(file); };
-      img.src = url;
+      // Memory-safe decode: shrink DURING decode so a 12MP phone photo never
+      // sits in RAM as a full bitmap plus a full canvas plus a blob. The old
+      // full-decode-then-shrink path OOM-crashes weak-phone renderers right
+      // after tapping ✓ — Chrome then auto-reloads the tab, which looks like
+      // a "refresh" and loses the image. Two-step (dims → close → resized
+      // decode) so only one small bitmap exists at a time. Falls back below.
+      if(typeof createImageBitmap==='function'){
+        createImageBitmap(file).then(bmp=>{
+          try{
+            const MAXB = 1280;
+            const bw = bmp.width||1, bh = bmp.height||1;
+            const scale = Math.min(1, MAXB / Math.max(bw, bh));
+            const w = Math.max(1, Math.round(bw*scale));
+            const h = Math.max(1, Math.round(bh*scale));
+            try{ if(bmp.close) bmp.close(); }catch(e){}
+            if(scale >= 1){ resolve(file); return; }
+            createImageBitmap(file, {resizeWidth:w, resizeHeight:h, resizeQuality:'high'}).then(small=>{
+              try{
+                const cv = document.createElement('canvas');
+                cv.width=w; cv.height=h;
+                cv.getContext('2d').drawImage(small, 0, 0, w, h);
+                try{ if(small.close) small.close(); }catch(e){}
+                cv.toBlob(b=>resolve(b || file), 'image/jpeg', 0.82);
+              }catch(e){ try{ if(small.close) small.close(); }catch(e2){} resolve(file); }
+            }).catch(()=>{ decodeFoodFull(file, resolve); });
+          }catch(e){ try{ if(bmp.close) bmp.close(); }catch(e2){} resolve(file); }
+        }).catch(()=>{ decodeFoodFull(file, resolve); });
+        return;
+      }
+      decodeFoodFull(file, resolve);
     }catch(e){ resolve(file); }
   }).then(f=>{
     if(f && f !== file && !f.name){
@@ -4335,13 +4371,15 @@ function downscaleFoodImage(file){
     return f;
   });
 }
-/* Take Photo routing: ALWAYS the integrated in-browser preview (all devices).
-   The old mobile path launched the native camera app, which backgrounds the
-   tab — Android then kills it under memory pressure and restores with a full
-   reload, losing the photo. The in-page preview never leaves the page, so no
-   refresh is possible. Analysis downscales to 1280px anyway, so a 12MP native
-   shot gains nothing over the preview capture. */
+/* Take Photo routing: touch phones get the native camera app (best UX);
+   PCs get a live in-browser preview like AI Coach (desktops ignore the
+   capture attribute and would otherwise dump into file explorer). */
 function foodTakePhoto(){
+  const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+  if(coarse){
+    try{ saveStateToStorage(); sessionStorage.setItem('fitquest_food_return', String(Date.now())); }catch(e){}
+    document.getElementById('food-camera').click(); return;
+  }
   openFoodCamera();
 }
 function stopFoodCam(){
