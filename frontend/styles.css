@@ -167,6 +167,15 @@ a{color:inherit;}
 .hero-stats{display:flex;gap:26px;margin-top:20px;}
 .hero-stat b{font-family:'Big Shoulders Display';font-size:26px;display:block;}
 .hero-stat span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+/* Hero split: greeting/stats left, water + steps right (fills the empty half) */
+.hero-split{display:flex;gap:22px;align-items:stretch;}
+.hero-main{flex:1.25;min-width:0;}
+.hero-side{flex:1;min-width:200px;display:flex;flex-direction:column;gap:12px;border-left:1px solid var(--line);padding-left:22px;}
+.hero-mini{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);padding:13px 15px;}
+.hero-mini .card-title{margin-bottom:6px;}
+.hero-mini-water{font-family:'Big Shoulders Display',sans-serif;font-size:19px;font-weight:700;line-height:1.35;}
+.hero-mini-water b{color:var(--blue);}
+@media (max-width:560px){.hero-split{flex-direction:column;}.hero-side{border-left:none;padding-left:0;border-top:1px solid var(--line);padding-top:16px;}}
 
 .xp-bar-outer{height:8px;background:var(--surface-2);border-radius:99px;overflow:hidden;margin-top:8px;}
 .xp-bar-inner{height:100%;background:var(--volt);border-radius:99px;transition:width .4s;}

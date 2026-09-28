@@ -2307,13 +2307,13 @@ function renderDashboard(){
       <div><h1 class="display">Dashboard</h1><p>Here's where your quest stands today.</p></div>
     </div>
     <div class="dash-grid">
-      <div class="card span3 water-head">${renderWaterHeading()}</div>
-
       <div class="card span3">
         ${renderReadinessCard()}
       </div>
 
       <div class="hero-card span2">
+        <div class="hero-split">
+        <div class="hero-main">
         <div class="hero-greet">${isNew ? 'Welcome to FitQuest,' : 'Good to see you,'}</div>
         <div class="hero-name">${esc(state.currentUser.name)} 👋</div>
         <div class="hero-msg">${isNew ? 'Your fitness journey starts now. Complete your first workout to earn XP!' : pick(MOTIVATION)}</div>
@@ -2327,6 +2327,25 @@ function renderDashboard(){
           <div class="xp-bar-outer"><div class="xp-bar-inner" style="width:${pct}%"></div></div>
         </div>
         ${isNew?`<div style="margin-top:14px;"><button class="btn btn-volt btn-sm" onclick="setView('coach')">🎥 Start Your First Workout</button></div>`:''}
+        </div>
+        <div class="hero-side">
+          <div class="hero-mini">
+            <div class="card-title">Daily Water</div>
+            <div class="hero-mini-water">${renderWaterHeading()}</div>
+          </div>
+          <div class="hero-mini">
+            <div class="card-title">👟 Step Tracker</div>
+            <div class="steps-today"><span id="steps-count-live">${steps.count.toLocaleString()}</span> <span class="unit">/ ${STEP_GOAL.toLocaleString()} steps</span></div>
+            <div class="xp-bar-outer"><div class="xp-bar-inner" id="steps-bar-inner" style="width:${stepsPct}%"></div></div>
+            <div class="small-muted" style="margin-top:8px;">📍 <span id="steps-distance-live">${stepsToDistanceKm(steps.count).toFixed(2)} km</span> walked/run today</div>
+            ${stepTrackingActive
+              ? `<div class="small-muted" style="margin-top:8px;">🟢 Auto-tracking — just keep this tab open while you move.</div>`
+              : stepPermissionNeeded
+                ? `<button class="btn btn-volt btn-sm mt" onclick="enableStepTrackingTap()">Enable Step Tracking</button>`
+                : `<div class="small-muted" style="margin-top:8px;">Motion sensors aren't available on this device/browser.</div>`}
+          </div>
+        </div>
+        </div>
       </div>
 
       <div class="card">
@@ -2372,18 +2391,6 @@ function renderDashboard(){
         <div style="font-weight:700;font-size:14px;">${nextChal.icon} ${nextChal.name}</div>
         <div class="chal-prog-outer"><div class="chal-prog-inner" style="width:${Math.min(100,Math.round(nextChal.progress/nextChal.target*100))}%"></div></div>
         <div class="small-muted">${nextChal.progress}/${nextChal.target} ${nextChal.unit}</div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">👟 Step Tracker</div>
-        <div class="steps-today"><span id="steps-count-live">${steps.count.toLocaleString()}</span> <span class="unit">/ ${STEP_GOAL.toLocaleString()} steps</span></div>
-        <div class="xp-bar-outer"><div class="xp-bar-inner" id="steps-bar-inner" style="width:${stepsPct}%"></div></div>
-        <div class="small-muted" style="margin-top:8px;">📍 <span id="steps-distance-live">${stepsToDistanceKm(steps.count).toFixed(2)} km</span> walked/run today</div>
-        ${stepTrackingActive
-          ? `<div class="small-muted" style="margin-top:8px;">🟢 Auto-tracking — no need to touch anything, just keep this tab open while you move.</div>`
-          : stepPermissionNeeded
-            ? `<button class="btn btn-volt btn-sm mt" onclick="enableStepTrackingTap()">Enable Step Tracking</button>`
-            : `<div class="small-muted" style="margin-top:8px;">Motion sensors aren't available on this device/browser.</div>`}
       </div>
 
       <div class="card">

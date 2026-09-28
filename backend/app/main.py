@@ -15,8 +15,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-# FitQuestAI/ folder (parent of backend/) — holds the HTML + logo assets.
+# FitQuestAI/ folder (parent of backend/); the servable site lives in frontend/.
 SITE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+FRONTEND_DIR = os.path.join(SITE_DIR, "frontend")
 
 from .database import Base, SessionLocal, engine
 from .models import SEED_CHALLENGES, Challenge
@@ -61,12 +62,13 @@ app.include_router(challenges.router)
 app.include_router(leaderboard.router)
 
 # Serve the site itself so one Render service covers frontend + API (same origin).
-app.mount("/static", StaticFiles(directory=SITE_DIR), name="site-static")
+# Only frontend/ is exposed — backend code and repo internals stay private.
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="site-static")
 
 
 @app.get("/", include_in_schema=False)
 def site_index():
-    return FileResponse(os.path.join(SITE_DIR, "index.html"))
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
 # Frontend split: index.html references /styles.css, /app.js, /clips.js.
@@ -85,7 +87,7 @@ def site_asset(name: str):
         # every load (304 if unchanged — cheap) so phones never run stale code.
         # clips.js (videos, rarely changes) keeps default ETag caching.
         headers = {"Cache-Control": "no-cache"} if name != "clips.js" else None
-        return FileResponse(os.path.join(SITE_DIR, name), media_type=_SITE_ASSETS[name], headers=headers)
+        return FileResponse(os.path.join(FRONTEND_DIR, name), media_type=_SITE_ASSETS[name], headers=headers)
     from fastapi import HTTPException
 
     raise HTTPException(404, "Not found")
