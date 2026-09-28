@@ -4335,19 +4335,13 @@ function downscaleFoodImage(file){
     return f;
   });
 }
-/* Take Photo routing: touch phones get the native camera app (best UX);
-   PCs get a live in-browser preview like AI Coach (desktops ignore the
-   capture attribute and would otherwise dump into file explorer). */
+/* Take Photo routing: ALWAYS the integrated in-browser preview (all devices).
+   The old mobile path launched the native camera app, which backgrounds the
+   tab — Android then kills it under memory pressure and restores with a full
+   reload, losing the photo. The in-page preview never leaves the page, so no
+   refresh is possible. Analysis downscales to 1280px anyway, so a 12MP native
+   shot gains nothing over the preview capture. */
 function foodTakePhoto(){
-  const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
-  if(coarse){
-    // Native camera backgrounds the tab; Android may kill it under memory
-    // pressure and restore with a full reload (the photo then dies with the
-    // old page). Persist everything + stamp a return flag so boot restores
-    // the session/view and guides a one-tap retry. PC path untouched.
-    try{ saveStateToStorage(); sessionStorage.setItem('fitquest_food_return', String(Date.now())); }catch(e){}
-    document.getElementById('food-camera').click(); return;
-  }
   openFoodCamera();
 }
 function stopFoodCam(){
