@@ -4371,15 +4371,11 @@ function downscaleFoodImage(file){
     return f;
   });
 }
-/* Take Photo routing: touch phones get the native camera app (best UX);
-   PCs get a live in-browser preview like AI Coach (desktops ignore the
-   capture attribute and would otherwise dump into file explorer). */
+/* Take Photo routing: ALWAYS the integrated in-browser preview (all devices).
+   The native camera app backgrounds the tab — Android then kills it under
+   memory pressure and restores with a full reload, losing the photo. The
+   in-page preview never leaves the page, so no refresh is possible. */
 function foodTakePhoto(){
-  const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
-  if(coarse){
-    try{ saveStateToStorage(); sessionStorage.setItem('fitquest_food_return', String(Date.now())); }catch(e){}
-    document.getElementById('food-camera').click(); return;
-  }
   openFoodCamera();
 }
 function stopFoodCam(){
