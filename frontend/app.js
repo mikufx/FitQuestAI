@@ -154,7 +154,7 @@ function toast(html){
 
 /* ---- Global bounce-on-click for interactive elements ---- */
 document.addEventListener('click', function(e){
-  const target = e.target.closest('button, .chip, .pick-card, .filter-chip, .nav-item, .auth-back-btn, .ex-card .btn, .badge-pill, .ex-card, .chal-card, .stat-tile, .macro-card, .xp-store-item, .plan-card, .lb-row, .meal-item');
+  const target = e.target.closest('button, .chip, .pick-card, .filter-chip, .nav-item, .auth-back-btn, .ex-card .btn, .badge-pill, .ex-card, .chal-card, .stat-tile, .macro-card, .xp-store-item, .plan-card, .lb-row, .meal-item, .premium-ex-row .btn');
   if(!target) return;
   // Don't bounce disabled buttons
   if(target.disabled || target.getAttribute('disabled')!=null) return;

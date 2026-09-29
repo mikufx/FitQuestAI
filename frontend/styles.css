@@ -592,7 +592,9 @@ button.hud-pill{font-family:inherit;cursor:pointer;}
 .premium-ex-row{cursor:default;}
 .premium-ex-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:13.5px;}
 .premium-ex-sets{flex:1;text-align:center;color:var(--muted);font-size:12.5px;white-space:nowrap;}
-.premium-ex-row .btn{flex-shrink:0;}
+.premium-ex-row .btn{flex-shrink:0;transition:transform .15s cubic-bezier(.34,1.56,.64,1),box-shadow .15s ease,background .15s ease;}
+.premium-ex-row .btn:hover{transform:scale(1.1);box-shadow:0 0 0 1px var(--volt),0 0 16px rgba(212,255,63,.45);border-color:var(--volt);color:var(--volt);}
+.premium-ex-row .btn:active{transform:scale(.93);}
 .premium-meal{margin-bottom:16px;}
 .premium-meal-item{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;color:var(--muted);}
 
