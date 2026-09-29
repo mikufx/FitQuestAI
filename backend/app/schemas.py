@@ -25,6 +25,11 @@ class SupabaseLoginIn(BaseModel):
     access_token: str = Field(min_length=10, max_length=8000)
 
 
+class JudgeExchangeIn(BaseModel):
+    """One-time-style judge link token (?judge=...). Scoped to the judge account only."""
+    token: str = Field(min_length=8, max_length=200)
+
+
 class SignupOut(BaseModel):
     message: str
     email: str

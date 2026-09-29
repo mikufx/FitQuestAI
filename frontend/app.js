@@ -210,7 +210,7 @@ async function exchangeSupabaseToken(sbToken){
     state.currentUser = {name: me.name, email: me.email};
     try{ localStorage.setItem('fitquest_session', me.email); }catch(e){}
     await hydrateFromServer();
-    if(me.profile) enterApp(); else renderOnboarding();
+    requireProfileOrEnter(me);
     return true;
   }
   return false;
@@ -306,7 +306,7 @@ async function doVerify(btn){
     if(me && me.profile) state.profile = me.profile;
     await hydrateFromServer();
     toast('<b>Email verified</b><br>Welcome to FitQuest AI!');
-    if(state.profile && state.profile.goal) enterApp(); else renderOnboarding();
+    requireProfileOrEnter(me);
   }catch(e){
     toast('<b>Verification failed</b><br>'+esc(prettyAuthError((e&&e.message)||e)));
     setBtnLoading(btn,false);
@@ -890,7 +890,7 @@ async function doLogin(btn){
     await apiLoginRemote(email,pass);
     state.currentUser={name:email.split('@')[0],email};
     const ok = await hydrateFromServer();
-    if(ok){ state.currentUser={name:(await apiFetchMe())?.name||state.currentUser.name,email}; enterApp(); return; }
+    if(ok){ const meNow=await apiFetchMe(); state.currentUser={name:(meNow&&meNow.name)||state.currentUser.name,email}; requireProfileOrEnter(meNow||{}); return; }
   }catch(e){
     const msg = String((e&&e.message)||e);
     if(msg.indexOf('429')===0){ toast('<b>Too many attempts</b><br>Wait a few seconds and try again.'); setBtnLoading(btn,false); return; }
@@ -902,8 +902,7 @@ async function doLogin(btn){
   const u = state.users.find(x=>x.email===email);
   if(!u || u.hashed!==hashed){toast('<b>Login failed</b><br>Check your email and password.');setBtnLoading(btn,false);return;}
   state.currentUser={name:u.name,email:u.email};
-  if(u.profile){ state.profile=u.profile; enterApp(); }
-  else renderOnboarding();
+  requireProfileOrEnter(u);
 }
 function doForgot(){
   toast('<b>Reset link sent</b><br>(Simulated — no email service connected in this prototype.)');
@@ -975,6 +974,35 @@ async function forgotReset(){
 /* ================= ONBOARDING ================= */
 let onbStep=0;
 const onbData={};
+/* Profile completeness gate: NO app access without real details.
+   Legacy placeholders ('—', 'Prefer not to say') count as missing, so old
+   half-profiles are sent back to onboarding instead of leaking into the app. */
+const PROFILE_REQUIRED = ['age','gender','height','weight','city','goal','level','activity'];
+function profileComplete(p){
+  if(!p) return false;
+  return PROFILE_REQUIRED.every(k=>{
+    const v = p[k];
+    if(v===null || v===undefined) return false;
+    if(typeof v==='number') return v>0;
+    const s = String(v).trim();
+    return s!=='' && s!=='—' && s!=='Prefer not to say';
+  });
+}
+/* Bounce incomplete users to onboarding with a clean slate. */
+function sendToOnboarding(msg){
+  onbStep=0; for(const k of Object.keys(onbData)) delete onbData[k];
+  state.profile=null; renderOnboarding();
+  if(msg) toast(msg);
+}
+/* Single checkpoint used by every login path (email, verify, Google, boot). */
+function requireProfileOrEnter(me){
+  const p = me && me.profile;
+  if(profileComplete(p)){ state.profile=p; enterApp(); return true; }
+  sendToOnboarding(p
+    ? '<b>Details incomplete</b><br>Please complete all fields to continue.'
+    : '<b>One step left</b><br>Fill in your details to enter.');
+  return false;
+}
 function renderOnboarding(){
   el('auth-card-holder').innerHTML = onbTemplate();
   bindOnbStep();
@@ -993,8 +1021,8 @@ function bindOnbStep(){
       <div class="sub">Step 1 of 3 — basics</div>
       <div class="row2">
         <div class="field"><label>Age</label><input id="ob-age" type="number" placeholder="24"></div>
-        <div class="field"><label>Gender (optional)</label>
-          <select id="ob-gender"><option>Prefer not to say</option><option>Male</option><option>Female</option><option>Other</option></select>
+        <div class="field"><label>Gender</label>
+          <select id="ob-gender"><option value="" selected disabled>Select</option><option>Male</option><option>Female</option><option>Other</option></select>
         </div>
       </div>
       <div class="row2">
@@ -1035,11 +1063,15 @@ function selectChip(btn,key){
 }
 function onbNext(step){
   if(step===0){
-    onbData.age=el('ob-age').value||25;
-    onbData.gender=el('ob-gender').value;
-    onbData.height=el('ob-height').value||170;
-    onbData.weight=el('ob-weight').value||65;
-    onbData.city=el('ob-city').value||'—';
+    // Every field mandatory — no silent defaults. Invalid input blocks Continue.
+    const age=parseInt(el('ob-age').value,10), height=parseFloat(el('ob-height').value), weight=parseFloat(el('ob-weight').value);
+    const gender=el('ob-gender').value, city=el('ob-city').value.trim();
+    if(!(age>=5&&age<=100)){toast('<b>Age required</b><br>Enter an age between 5 and 100.');return;}
+    if(!gender){toast('<b>Gender required</b><br>Select an option to continue.');return;}
+    if(!(height>=100&&height<=250)){toast('<b>Height required</b><br>Enter height in cm (100–250).');return;}
+    if(!(weight>=25&&weight<=300)){toast('<b>Weight required</b><br>Enter weight in kg (25–300).');return;}
+    if(city.length<2){toast('<b>City required</b><br>Enter your city.');return;}
+    onbData.age=age; onbData.gender=gender; onbData.height=height; onbData.weight=weight; onbData.city=city;
   }
   if(step===1 && !onbData.goal){toast('<b>Pick a goal</b><br>Select one to continue.');return;}
   onbStep++;
@@ -5060,8 +5092,36 @@ async function doDeleteAccount(){
   setTimeout(()=>location.reload(), 700);
 }
 
+/* ================= JUDGE DIRECT LINK (?judge=TOKEN) =================
+   Password-less judge entry: swaps the link token for a judge login token.
+   Token is wiped from the URL immediately; bad tokens fall through to the
+   normal login screen. Scoped to the judge account server-side. */
+async function handleJudgeLink(){
+  let tok=null;
+  try{ tok=new URLSearchParams(location.search).get('judge'); }catch(e){}
+  if(!tok) return false;
+  try{ history.replaceState(null,'',location.pathname); }catch(e){}
+  try{
+    const out=await apiReq('/api/auth/judge-exchange',{method:'POST',body:{token:tok},timeoutMs:15000});
+    if(!(out&&out.access_token)) throw new Error('exchange failed');
+    apiSetToken(out.access_token);
+    const me=await apiFetchMe();
+    if(me&&me.email){
+      state.currentUser={name:me.name,email:me.email};
+      try{localStorage.setItem('fitquest_session',me.email);}catch(e){}
+      await hydrateFromServer();
+      toast('<b>Welcome, Judge</b><br>Signed in automatically.');
+      requireProfileOrEnter(me);
+      return true;
+    }
+  }catch(e){
+    toast('<b>Judge link invalid</b><br>Please log in normally.');
+  }
+  return false;
+}
 /* ================= INIT ================= */
 renderAuthLogin();
+handleJudgeLink(); // ?judge=TOKEN direct entry (judges skip login)
 handleGoogleCallback(); // Google OAuth return visit? exchange session -> enter app
 
 /* Restore a previous session after a reload (camera round-trip, OS tab kill).
@@ -5077,7 +5137,7 @@ async function bootSession(){
       state.currentUser={name:me.name,email};
       if(me.profile) state.profile=me.profile;
       await hydrateFromServer();
-      enterApp();
+      requireProfileOrEnter({profile:state.profile});
       return;
     }catch(e){
       // Dead token -> drop it. Network error -> keep it, use local snapshot.
@@ -5089,7 +5149,7 @@ async function bootSession(){
     const reg=loadUsersRegistry();
     const u=reg.find(x=>x.email===email);
     if(u){ state.users=reg; state.currentUser={name:u.name,email:u.email}; if(u.profile) state.profile=u.profile; }
-    enterApp();
+    requireProfileOrEnter({profile:state.profile});
   }catch(e){}
 }
 bootSession();

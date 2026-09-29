@@ -11,7 +11,7 @@ from ..auth import create_token, hash_password, verify_password
 from ..database import get_db
 from ..emailer import send_verification_email
 from ..models import SEED_CHALLENGES, Challenge, Profile, User, UserChallenge
-from ..schemas import ForgotIn, LoginIn, ResendIn, ResetIn, SignupIn, SignupOut, SupabaseLoginIn, TokenOut, UserOut, VerifyIn
+from ..schemas import ForgotIn, LoginIn, ResendIn, ResetIn, SignupIn, SignupOut, SupabaseLoginIn, TokenOut, UserOut, VerifyIn, JudgeExchangeIn
 from ..supabase_auth import verify_supabase_token
 from .deps import current_user, level_for_xp
 
@@ -191,6 +191,23 @@ def supabase_login(body: SupabaseLoginIn, db: Session = Depends(get_db)):
             db.flush()
             _ensure_challenges(db, user)
     db.commit()
+    return TokenOut(access_token=create_token(user.id))
+
+
+@router.post("/judge-exchange", response_model=TokenOut)
+def judge_exchange(body: JudgeExchangeIn, db: Session = Depends(get_db)):
+    """Password-less judge entry link (?judge=TOKEN). Scoped to the single
+    judge account — no other account is reachable through this endpoint.
+    Set JUDGE_QR_TOKEN in server env; rotate it to kill old links instantly."""
+    import hmac
+    import os
+
+    expected = os.environ.get("JUDGE_QR_TOKEN", "").strip()
+    if not expected or not hmac.compare_digest(body.token, expected):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid judge link. Please log in normally.")
+    user = db.query(User).filter_by(email="sihjudges2026@gmail.com").first()
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Judge account not found.")
     return TokenOut(access_token=create_token(user.id))
 
 
