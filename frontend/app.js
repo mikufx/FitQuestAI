@@ -2440,15 +2440,10 @@ function renderDashboard(){
       </div>
 
       <div class="card">
-        <div class="card-title">Challenges</div>
-        ${state.challenges.map(c=>`
-          <div class="workout-mini" onclick="setView('challenges')" style="cursor:pointer;" title="Open challenges">
-            <span>${c.icon} ${esc(c.name)}</span>
-            <span class="small-muted">${c.progress}/${c.target} ${c.unit}</span>
-          </div>
-          <div class="chal-prog-outer" style="margin:-2px 0 8px;"><div class="chal-prog-inner" style="width:${Math.min(100,Math.round(c.progress/c.target*100))}%"></div></div>
-        `).join('')}
-        <button class="btn btn-ghost btn-sm btn-block" onclick="setView('challenges')">View all challenges</button>
+        <div class="card-title">Current Challenge</div>
+        <div style="font-weight:700;font-size:14px;">${nextChal.icon} ${nextChal.name}</div>
+        <div class="chal-prog-outer"><div class="chal-prog-inner" style="width:${Math.min(100,Math.round(nextChal.progress/nextChal.target*100))}%"></div></div>
+        <div class="small-muted">${nextChal.progress}/${nextChal.target} ${nextChal.unit}</div>
       </div>
 
       <div class="card">
