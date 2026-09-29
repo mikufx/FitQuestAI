@@ -154,7 +154,7 @@ function toast(html){
 
 /* ---- Global bounce-on-click for interactive elements ---- */
 document.addEventListener('click', function(e){
-  const target = e.target.closest('button, .chip, .pick-card, .filter-chip, .nav-item, .auth-back-btn, .ex-card .btn, .badge-pill, .ex-card, .chal-card, .stat-tile, .macro-card, .xp-store-item, .plan-card, .lb-row, .meal-item, .premium-ex-row');
+  const target = e.target.closest('button, .chip, .pick-card, .filter-chip, .nav-item, .auth-back-btn, .ex-card .btn, .badge-pill, .ex-card, .chal-card, .stat-tile, .macro-card, .xp-store-item, .plan-card, .lb-row, .meal-item');
   if(!target) return;
   // Don't bounce disabled buttons
   if(target.disabled || target.getAttribute('disabled')!=null) return;
@@ -975,9 +975,9 @@ async function forgotReset(){
 let onbStep=0;
 const onbData={};
 /* Profile completeness gate: NO app access without real details.
-   Legacy placeholders ('—', 'Prefer not to say') count as missing, so old
-   half-profiles are sent back to onboarding instead of leaking into the app. */
-const PROFILE_REQUIRED = ['age','gender','height','weight','city','goal','level','activity'];
+   City is optional and 'Prefer not to say' is an allowed gender answer —
+   both pass. Legacy '—' placeholders on required fields still count as missing. */
+const PROFILE_REQUIRED = ['age','gender','height','weight','goal','level','activity'];
 function profileComplete(p){
   if(!p) return false;
   return PROFILE_REQUIRED.every(k=>{
@@ -985,22 +985,27 @@ function profileComplete(p){
     if(v===null || v===undefined) return false;
     if(typeof v==='number') return v>0;
     const s = String(v).trim();
-    return s!=='' && s!=='—' && s!=='Prefer not to say';
+    return s!=='' && s!=='—';
   });
 }
-/* Bounce incomplete users to onboarding with a clean slate. */
-function sendToOnboarding(msg){
+/* Bounce incomplete users straight to the details form — no toast in between.
+   Forces the auth screen visible so the form can't hide behind app chrome. */
+function sendToOnboarding(){
   onbStep=0; for(const k of Object.keys(onbData)) delete onbData[k];
-  state.profile=null; renderOnboarding();
-  if(msg) toast(msg);
+  state.profile=null;
+  try{
+    el('auth-screen').classList.remove('hidden');
+    el('app').classList.add('hidden');
+    el('app-topbar').classList.remove('visible');
+    window.scrollTo(0,0);
+  }catch(e){}
+  renderOnboarding();
 }
 /* Single checkpoint used by every login path (email, verify, Google, boot). */
 function requireProfileOrEnter(me){
   const p = me && me.profile;
   if(profileComplete(p)){ state.profile=p; enterApp(); return true; }
-  sendToOnboarding(p
-    ? '<b>Details incomplete</b><br>Please complete all fields to continue.'
-    : '<b>One step left</b><br>Fill in your details to enter.');
+  sendToOnboarding();
   return false;
 }
 function renderOnboarding(){
@@ -1022,14 +1027,14 @@ function bindOnbStep(){
       <div class="row2">
         <div class="field"><label>Age</label><input id="ob-age" type="number" placeholder="24"></div>
         <div class="field"><label>Gender</label>
-          <select id="ob-gender"><option value="" selected disabled>Select</option><option>Male</option><option>Female</option><option>Other</option></select>
+          <select id="ob-gender"><option value="" selected disabled>Select</option><option>Male</option><option>Female</option><option>Prefer not to say</option></select>
         </div>
       </div>
       <div class="row2">
         <div class="field"><label>Height (cm)</label><input id="ob-height" type="number" placeholder="175"></div>
         <div class="field"><label>Weight (kg)</label><input id="ob-weight" type="number" placeholder="70"></div>
       </div>
-      <div class="field"><label>City</label><input id="ob-city" placeholder="Mumbai"></div>
+        <div class="field"><label>City (optional)</label><input id="ob-city" placeholder="Mumbai"></div>
       <button class="btn btn-volt btn-block" onclick="onbNext(0)">Continue</button>`;
   } else if(onbStep===1){
     const goals=['Improve Fitness','Build Strength','Lose Weight','Improve Stamina','Stay Active'];
@@ -1070,8 +1075,8 @@ function onbNext(step){
     if(!gender){toast('<b>Gender required</b><br>Select an option to continue.');return;}
     if(!(height>=100&&height<=250)){toast('<b>Height required</b><br>Enter height in cm (100–250).');return;}
     if(!(weight>=25&&weight<=300)){toast('<b>Weight required</b><br>Enter weight in kg (25–300).');return;}
-    if(city.length<2){toast('<b>City required</b><br>Enter your city.');return;}
-    onbData.age=age; onbData.gender=gender; onbData.height=height; onbData.weight=weight; onbData.city=city;
+    if(city && city.length<2){toast('<b>City too short</b><br>Enter your city or leave it blank.');return;}
+    onbData.age=age; onbData.gender=gender; onbData.height=height; onbData.weight=weight; onbData.city=city||'—';
   }
   if(step===1 && !onbData.goal){toast('<b>Pick a goal</b><br>Select one to continue.');return;}
   onbStep++;
@@ -1782,19 +1787,35 @@ function toggleReminders(){
   });
 }
 
+/* Premium diet pool: junk food never appears in AI plans (users can still
+   log pizza/burger manually in Nutrition — tracking what you ate is honest).
+   Staples (Oats, Green Salad) are guaranteed at least once a day. */
+const PREMIUM_JUNK = ['Pizza Slice','Burger'];
+const PREMIUM_STAPLES = [{meal:'Breakfast', name:'Oats'}, {meal:'Lunch', name:'Green Salad'}];
 function buildDietPlan(calGoal, pGoal, cGoal, fGoal){
   const mealSplit=[{meal:'Breakfast',icon:'🌅',pct:0.25},{meal:'Lunch',icon:'☀️',pct:0.35},{meal:'Dinner',icon:'🌙',pct:0.30},{meal:'Snacks',icon:'🍎',pct:0.10}];
+  const pool = FOODS.filter(f=>!PREMIUM_JUNK.includes(f.n));
   const dietPlan = mealSplit.map(m=>{
     const target = Math.round((calGoal||2200)*m.pct);
-    const items=[]; let kcal=0,pr=0,cb=0,ft=0;
-    for(const f of shuffle([...FOODS])){
+    const items=[]; let kcal=0;
+    for(const f of shuffle([...pool])){
       if(items.some(x=>x.n===f.n)) continue;
-      if(kcal + f.kcal <= target*1.1){ items.push(f); kcal+=f.kcal; pr+=f.p; cb+=f.c; ft+=f.f; }
+      if(kcal + f.kcal <= target*1.1){ items.push(f); kcal+=f.kcal; }
       if(kcal>=target*0.85) break;
     }
-    if(!items.length) items.push(pick(FOODS));
-    return {meal:m.meal, icon:m.icon, target, items, totals:{kcal:Math.round(kcal),p:Math.round(pr),c:Math.round(cb),f:Math.round(ft)}};
+    if(!items.length) items.push(pick(pool));
+    return {meal:m.meal, icon:m.icon, target, items, totals:{kcal:0,p:0,c:0,f:0}};
   });
+  for(const s of PREMIUM_STAPLES){
+    if(dietPlan.some(m=>m.items.some(i=>i.n===s.name))) continue;
+    const food = FOODS.find(f=>f.n===s.name);
+    const slot = dietPlan.find(m=>m.meal===s.meal);
+    if(food && slot) slot.items.push(food);
+  }
+  for(const m of dietPlan){
+    m.totals = m.items.reduce((a,f)=>({kcal:a.kcal+f.kcal,p:a.p+f.p,c:a.c+f.c,f:a.f+f.f}),{kcal:0,p:0,c:0,f:0});
+    m.totals = {kcal:Math.round(m.totals.kcal),p:Math.round(m.totals.p),c:Math.round(m.totals.c),f:Math.round(m.totals.f)};
+  }
   const dietTotals = dietPlan.reduce((a,m)=>({kcal:a.kcal+m.totals.kcal,p:a.p+m.totals.p,c:a.c+m.totals.c,f:a.f+m.totals.f}),{kcal:0,p:0,c:0,f:0});
   return {dietPlan, dietTotals};
 }
@@ -1904,8 +1925,8 @@ function renderPremium(){
         <p class="small-muted">${esc(day.note||'Rest day.')}</p>
       ` : day.exercises.map(e=>`
         <div class="premium-ex-row">
-          <span>${e.icon} ${esc(e.name)}</span>
-          <span class="small-muted">${e.sets} sets × ${e.reps}</span>
+          <span class="premium-ex-name">${e.icon} ${esc(e.name)}</span>
+          <span class="premium-ex-sets">${e.sets} sets × ${e.reps}</span>
           <button class="btn btn-ghost btn-sm" onclick="openCoachWith('${e.id}')">Start ▶</button>
         </div>`).join('')}
     </div>
@@ -2090,8 +2111,8 @@ function renderTrainer(){
           <p class="small-muted">Rest &amp; recovery day.</p>
         ` : day.exercises.map(e=>`
           <div class="premium-ex-row">
-            <span>${e.icon} ${esc(e.name)}</span>
-            <span class="small-muted">${e.sets} sets × ${e.reps}</span>
+            <span class="premium-ex-name">${e.icon} ${esc(e.name)}</span>
+            <span class="premium-ex-sets">${e.sets} sets × ${e.reps}</span>
             <button class="btn btn-ghost btn-sm" onclick="openCoachWith('${e.id}')">Start ▶</button>
           </div>`).join('')}
       </div>
