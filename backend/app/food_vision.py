@@ -20,23 +20,20 @@ INVOKE_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 MODEL = os.environ.get("NVIDIA_VISION_MODEL", "moonshotai/kimi-k3")
 
 PROMPT = (
-    "You are a nutrition-vision expert analyzing a meal photo for an Indian user's diet tracker. "
-    "The user eats Indian food most often (roti, dal, rice, sabzi, paneer, dosa, idli, biryani, etc.) — "
-    "prefer the specific Indian dish name when the food matches, otherwise use the internationally known name. "
-    "Work in steps before answering: "
-    "(1) list every edible component you can actually see; "
-    "(2) pick the ONE main dish (ignore garnish, table, hands, plates); "
-    "(3) estimate the portion against a standard serving using plate/bowl size cues "
-    "(e.g. 2 rotis, 1 katori dal ~150ml, 1 cup cooked rice ~150g); "
-    "(4) estimate kcal/protein/carbs/fat for THAT visible portion, not a generic 100g value. "
-    "Screenshots of text, phone/computer screens, people, rooms, animals, or any non-edible scene "
-    "are NOT food — even if food words appear in text. "
-    "Return ONLY valid JSON, no markdown, no extra text. "
+    "Output ONLY a single JSON object. No preamble, no image description, no markdown, no explanations. "
     'Schema: {"is_food": true/false, "name": "<specific dish name>", '
     '"unit": "<what you see, e.g. 2 rotis + 1 katori dal>", "kcal": <int for the visible portion>, '
     '"protein_g": <number>, "carbs_g": <number>, "fat_g": <number>, '
     '"confidence": <int 0-100>}. '
-    'If is_food is false, set name to "Not food" and confidence to 0. '
+    "You are a nutrition-vision expert analyzing a meal photo for an Indian user's diet tracker. "
+    "The user eats Indian food most often (roti, dal, rice, sabzi, paneer, dosa, idli, biryani, etc.) — "
+    "prefer the specific Indian dish name when the food matches, otherwise use the internationally known name. "
+    "Estimate the visible portion against a standard serving using plate/bowl size cues "
+    "(e.g. 2 rotis, 1 katori dal ~150ml, 1 cup cooked rice ~150g), and give kcal/protein/carbs/fat "
+    "for THAT visible portion, not a generic 100g value. "
+    "Screenshots of text, screens, people, rooms, animals, or any non-edible scene "
+    "are NOT food — even if food words appear in text; then is_food is false, "
+    'name is "Not food" and confidence is 0. '
     "Keep confidence honest: below 55 means you are guessing — say so with a low number, never inflate it."
 )
 
@@ -81,7 +78,8 @@ async def analyze_food_image(image_url: str, timeout_s: float = 170.0) -> dict:
         "model": MODEL,
         # Small: we need ~150 tokens of JSON. Large values make the hosted
         # model stream far longer (users reported ~1min waits timing out).
-        "max_tokens": 300,
+        # 600 leaves headroom so the JSON never gets cut off mid-object.
+        "max_tokens": 600,
         "temperature": 0.2,
         "stream": False,
         "messages": [
