@@ -103,6 +103,7 @@ def startup():
         from sqlalchemy import text
 
         db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS supabase_id VARCHAR(64)"))
+        db.execute(text("ALTER TABLE user_challenges ADD COLUMN IF NOT EXISTS last_bump_at TIMESTAMP"))
         db.commit()
         for c in SEED_CHALLENGES:
             if not db.get(Challenge, c["id"]):

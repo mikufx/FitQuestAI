@@ -115,6 +115,8 @@ class UserChallenge(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
     challenge_id: Mapped[str] = mapped_column(ForeignKey("challenges.id"), nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0)
+    # Anti-cheat: one progress log per calendar day (server date).
+    last_bump_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     user: Mapped[User] = relationship("User", back_populates="challenges")

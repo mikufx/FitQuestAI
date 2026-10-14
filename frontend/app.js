@@ -4571,6 +4571,7 @@ function renderChallenges(){
       ${state.challenges.map(c=>{
         const pct=Math.min(100,Math.round(c.progress/c.target*100));
         const done = c.progress>=c.target;
+        const loggedToday = c.lastBump===dayStr(new Date());
         return `<div class="chal-card">
           <div class="chal-top"><div class="chal-icon">${c.icon}</div>${done?'<span class="tag" style="color:var(--green)">Completed</span>':''}</div>
           <div style="font-weight:700;margin-top:8px;">${c.name}</div>
@@ -4581,7 +4582,7 @@ function renderChallenges(){
             <span>${c.participants} joined</span>
           </div>
           <div class="chal-foot"><span>Reward: ${c.xp} XP</span>
-            ${done? '<span style="color:var(--green)">✓ Done</span>' : `<button class="btn btn-outline btn-sm" onclick="bumpChallenge('${c.id}')">Log Progress</button>`}
+            ${done? '<span style="color:var(--green)">✓ Done</span>' : loggedToday ? `<span class="small-muted">✓ Logged today — back tomorrow</span>` : `<button class="btn btn-outline btn-sm" onclick="bumpChallenge('${c.id}')">Log Progress</button>`}
           </div>
         </div>`;
       }).join('')}
@@ -4590,6 +4591,10 @@ function renderChallenges(){
 function bumpChallenge(id){
   const c=state.challenges.find(x=>x.id===id);
   if(!c) return;
+  // One log per calendar day — mirrors the server rule, works offline.
+  const todayS = dayStr(new Date());
+  if(c.lastBump===todayS){ toast('<b>Already logged today</b><br>Come back tomorrow to log again.'); return; }
+  c.lastBump=todayS;
   c.progress=Math.min(c.target,c.progress+1);
   apiSyncChallenge(id);
   if(c.progress>=c.target){ unlockBadge('challenge'); addXp(c.xp,`Challenge complete: ${c.name}`); }

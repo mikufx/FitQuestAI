@@ -38,13 +38,19 @@ def list_challenges(user: User = Depends(current_user), db: Session = Depends(ge
 
 @router.post("/{cid}/progress", response_model=ChallengeOut)
 def bump(cid: str, increment: int = 1, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from datetime import date, datetime
+
     _ensure(db, user)
     chal = db.get(Challenge, cid)
     if not chal:
         raise HTTPException(404, "Challenge not found")
     uc = db.query(UserChallenge).filter_by(user_id=user.id, challenge_id=cid).first()
+    # One log per calendar day — 7-day challenges take 7 real days.
+    if uc.last_bump_at and uc.last_bump_at.date() == date.today():
+        raise HTTPException(429, "Already logged today. Come back tomorrow to log again.")
     was_done = uc.progress >= chal.target
     uc.progress = min(chal.target, uc.progress + max(1, increment))
+    uc.last_bump_at = datetime.utcnow()
     if uc.progress >= chal.target and not was_done:
         user.badges = {**(user.badges or {}), "challenge": True}
         user.xp += chal.xp
