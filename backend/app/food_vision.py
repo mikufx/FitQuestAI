@@ -79,7 +79,9 @@ async def analyze_food_image(image_url: str, timeout_s: float = 170.0) -> dict:
         raise RuntimeError("NVIDIA_API_KEY is not set on the server")
     payload = {
         "model": MODEL,
-        "max_tokens": 1024,
+        # Small: we need ~150 tokens of JSON. Large values make the hosted
+        # model stream far longer (users reported ~1min waits timing out).
+        "max_tokens": 300,
         "temperature": 0.2,
         "stream": False,
         "messages": [

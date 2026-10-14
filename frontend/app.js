@@ -4487,7 +4487,7 @@ async function analyzeFoodFile(file){
       <div class="recognized-card">
         <div class="thumb">🔍</div>
         <div style="flex:1;"><div style="font-weight:700;">Analyzing photo…</div>
-        <div class="small-muted">AI vision model is estimating this meal.</div></div>
+        <div class="small-muted">AI vision model is estimating this meal (up to a minute on first try — please wait).</div></div>
       </div>`;
     try{
       const fd = new FormData();
